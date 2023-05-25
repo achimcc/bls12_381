@@ -1,5 +1,10 @@
 //! This module provides an implementation of the $\mathbb{G}_1$ group of BLS12-381.
 
+use crate::ArkScale;
+use ark_ec::{AffineRepr, CurveGroup, short_weierstrass::Affine};
+use ark_scale::hazmat::ArkScaleProjective;
+use ark_std::One;
+use codec::{Decode, Encode};
 use core::borrow::Borrow;
 use core::fmt;
 use core::iter::Sum;
@@ -557,7 +562,161 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Projective {
     type Output = G1Projective;
 
     fn mul(self, other: &'b Scalar) -> Self::Output {
-        self.multiply(&other.to_bytes())
+        let self_affine: G1Affine = self.into();
+
+        let ark_self_affine = ark_bls12_381::G1Affine {
+            x: ark_bls12_381::fq::Fq {
+                0: ark_ff::biginteger::BigInt::<6>(self_affine.x.0),
+                1: ark_std::marker::PhantomData,
+            },
+            y: ark_bls12_381::fq::Fq {
+                0: ark_ff::biginteger::BigInt::<6>(self_affine.y.0),
+                1: ark_std::marker::PhantomData,
+            },
+            infinity: self_affine.is_identity().into(),
+        };
+        let ark_self_projective: ark_bls12_381::G1Projective = ark_self_affine.into();
+        let ark_self_projective: ArkScaleProjective<ark_bls12_381::G1Projective> = ark_self_projective.into();
+
+        assert!(ark_self_projective.0.into_affine().is_on_curve(), "ark_self_projective is not on curve!");
+        
+        let other: ArkScale<&[u64]> = other.0.as_slice().into();
+
+        let result = sp_crypto_ec_utils::bls12_381::mul_projective_g1(
+            ark_self_projective.encode(),
+            other.encode(),
+        )
+        .unwrap();
+
+        let result = <ArkScaleProjective<ark_bls12_381::G1Projective> as Decode>::decode(
+            &mut result.as_slice(),
+        )
+        .unwrap()
+        .0;
+
+        let ark_result_affine: ark_bls12_381::G1Affine = result.into();
+
+        assert!(ark_result_affine.is_on_curve(), "ark_result_affine is not on curve!");
+
+        let result_affine = match ark_result_affine.xy() {
+            Some((x,y)) => G1Affine {
+                x: Fp(x.0.0),
+                y: Fp(y.0.0),
+                infinity: Choice::from(1u8),
+
+            },
+            None => G1Affine::identity(),
+        };
+
+        let is_on_curve:bool = result_affine.is_on_curve().into();
+
+        assert!(is_on_curve, "result_affine is not on curve!");
+
+        let result: G1Projective = result_affine.into();
+
+        result
+
+        // let result_affine = G1Affine {
+        //     x: Fp(result_affine.x()),
+        //     y: Fp(result_affine.y()),
+        //     infinity: result_affine.is_zero(),
+
+        // };
+
+        // let is_zero: Choice = match result.into_affine().is_zero() {
+        //     true => Choice::from(1u8),
+        //     false => Choice::from(0u8),
+        // };
+
+        // Self::Output {
+        //     x: Fp(result.x.0 .0),
+        //     y: Fp(result.y.0 .0),
+        //     z: Fp::conditional_select(&Fp::zero(), &Fp(result.z.0.0), is_zero),
+        // }
+
+
+
+        // ark_std::println!("self is identity: {:?}", self.is_identity());
+        // let is_identity = self.is_identity();
+        // let ark_self = ark_bls12_381::G1Projective {
+        //     x: ark_bls12_381::fq::Fq {
+        //         0: ark_ff::biginteger::BigInt::<6>(self.x.0),
+        //         1: ark_std::marker::PhantomData,
+        //     },
+        //     y: ark_bls12_381::fq::Fq {
+        //         0: ark_ff::biginteger::BigInt::<6>(self.y.0),
+        //         1: ark_std::marker::PhantomData,
+        //     },
+        //     z: ark_bls12_381::fq::Fq {
+        //         0: ark_ff::biginteger::BigInt::<6>(
+        //             Fp::conditional_select(&self.z, &Fp::zero(), is_identity).0,
+        //         ),
+        //         1: ark_std::marker::PhantomData,
+        //     },
+        // };
+        // // assert!(
+        // //     ark_self.into_affine().is_on_curve(),
+        // //     "ark_self is not on curve!"
+        // // );
+        // let ark_self_new: ArkScaleProjective<ark_bls12_381::G1Projective> = ark_self.into();
+        // let other_new: ArkScale<&[u64]> = other.0.as_slice().into();
+
+        // ark_std::println!("self: {:?}", self);
+
+        // ark_std::println!("ark_self_new: {:?}", ark_self_new.0);
+
+        // // assert!(ark_self_new.0.into_affine().is_on_curve(), "point is not on curve!");
+
+        // let ark_self_check = <ArkScaleProjective<ark_bls12_381::G1Projective> as Decode>::decode(
+        //     &mut ark_self_new.encode().as_slice(),
+        // )
+        // .unwrap()
+        // .0;
+
+        // let is_zero: Choice = match ark_self_check.into_affine().is_zero() {
+        //     true => Choice::from(1u8),
+        //     false => Choice::from(0u8),
+        // };
+        // Fp::conditional_select(&Fp(ark_self_check.z.0.0), &Fp::one(), is_zero);
+
+        // let self_check = G1Projective {
+        //     x: Fp(ark_self_check.x.0 .0),
+        //     y: Fp(ark_self_check.y.0 .0),
+        //     z: Fp::conditional_select(&Fp(ark_self_check.z.0 .0), &Fp::zero(), is_zero),
+        // };
+
+        // ark_std::println!("self: {:?}", self);
+
+        // ark_std::println!("self_check: {:?}", self_check);
+
+        // assert_eq!(self_check, self.clone(), "unequal projectives!");
+
+        // assert!(ark_self_new.0.into_affine().is_on_curve(), "ark_self_new is not on curve");
+
+        // let result = sp_crypto_ec_utils::bls12_381::mul_projective_g1(
+        //     ark_self_new.encode(),
+        //     other_new.encode(),
+        // )
+        // .unwrap();
+
+        // let result = <ArkScaleProjective<ark_bls12_381::G1Projective> as Decode>::decode(
+        //     &mut result.as_slice(),
+        // )
+        // .unwrap()
+        // .0;
+
+        // // let check_result: ark_bls12_381::G1Affine = result.into();
+        // // assert!(check_result.is_on_curve(), "result is not on curve!");
+
+        // let is_zero: Choice = match result.into_affine().is_zero() {
+        //     true => Choice::from(1u8),
+        //     false => Choice::from(0u8),
+        // };
+        // Self::Output {
+        //     x: Fp(result.x.0 .0),
+        //     y: Fp(result.y.0 .0),
+        //     z: Fp::conditional_select(&Fp::zero(), &Fp(result.z.0.0), is_zero),
+        // }
     }
 }
 
