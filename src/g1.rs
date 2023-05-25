@@ -1,5 +1,9 @@
 //! This module provides an implementation of the $\mathbb{G}_1$ group of BLS12-381.
+use crate::ArkScale;
 
+use ark_ec::AffineRepr;
+use ark_scale::hazmat::ArkScaleProjective;
+use codec::{Decode, Encode};
 use core::borrow::Borrow;
 use core::fmt;
 use core::iter::Sum;
@@ -574,7 +578,48 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
     type Output = G1Projective;
 
     fn mul(self, other: &'b Scalar) -> Self::Output {
-        G1Projective::from(self).multiply(&other.to_bytes())
+        // conver to arkworks G1Affine
+        let base = ark_bls12_381::G1Affine {
+            x: ark_bls12_381::fq::Fq {
+                0: ark_ff::biginteger::BigInt::<6>(self.x.0),
+                1: ark_std::marker::PhantomData,
+            },
+            y: ark_bls12_381::fq::Fq {
+                0: ark_ff::biginteger::BigInt::<6>(self.y.0),
+                1: ark_std::marker::PhantomData,
+            },
+            infinity: self.is_identity().into(),
+        };
+        let base: ark_bls12_381::G1Projective = base.into();
+        let base: ArkScaleProjective<ark_bls12_381::G1Projective> = base.into();
+
+        // We need to perform Montgomery reduction to get it into Arkworks representation
+        let other = other.to_bytes();
+        let other = num_bigint::BigUint::from_bytes_le(&other);
+        let other = other.to_u64_digits();
+        let other: ArkScale<&[u64]> = other.as_slice().into();
+
+        // Compute affine mul
+        let result =
+            sp_crypto_ec_utils::bls12_381::mul_projective_g1(base.encode(), other.encode())
+                .unwrap();
+
+        // Convert result back into bls12_381 representation
+        let result = <ArkScaleProjective<ark_bls12_381::G1Projective> as Decode>::decode(
+            &mut result.as_slice(),
+        )
+        .unwrap()
+        .0;
+        let result: ark_bls12_381::G1Affine = result.into();
+        let result = match result.xy() {
+            Some((x, y)) => G1Affine {
+                x: Fp(x.0 .0),
+                y: Fp(y.0 .0),
+                infinity: Choice::from(0),
+            },
+            None => G1Affine::identity(),
+        };
+        result.into()
     }
 }
 
@@ -1589,6 +1634,16 @@ fn test_affine_scalar_multiplication() {
         0x4c8d_bc39_e7b7_56c1,
         0x70d9_b6cc_6d87_df20,
     ]);
+    let c = a * b;
+
+    assert_eq!(G1Affine::from(g * a) * b, g * c);
+}
+
+#[test]
+fn test_affine_scalar_multiplication_2() {
+    let g = G1Affine::generator();
+    let a = Scalar::from(2);
+    let b = Scalar::from(1);
     let c = a * b;
 
     assert_eq!(G1Affine::from(g * a) * b, g * c);
