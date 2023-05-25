@@ -579,17 +579,10 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
 
     fn mul(self, other: &'b Scalar) -> Self::Output {
         // conver to arkworks G1Affine
-        let base = ark_bls12_381::G1Affine {
-            x: ark_bls12_381::fq::Fq {
-                0: ark_ff::biginteger::BigInt::<6>(self.x.0),
-                1: ark_std::marker::PhantomData,
-            },
-            y: ark_bls12_381::fq::Fq {
-                0: ark_ff::biginteger::BigInt::<6>(self.y.0),
-                1: ark_std::marker::PhantomData,
-            },
-            infinity: self.is_identity().into(),
-        };
+        let base = fastcrypto_zkp::bls12381::conversions::bls_g1_affine_from_zcash_bytes(
+            &self.to_bytes().0,
+        )
+        .unwrap();
         let base: ark_bls12_381::G1Projective = base.into();
         let base: ArkScaleProjective<ark_bls12_381::G1Projective> = base.into();
 
@@ -604,12 +597,14 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
             sp_crypto_ec_utils::bls12_381::mul_projective_g1(base.encode(), other.encode())
                 .unwrap();
 
-        // Convert result back into bls12_381 representation
+        // Deserialize into arkworks bls12_381 Projective
         let result = <ArkScaleProjective<ark_bls12_381::G1Projective> as Decode>::decode(
             &mut result.as_slice(),
         )
         .unwrap()
         .0;
+
+        // Convert result back into bls12_381 representation
         let result: ark_bls12_381::G1Affine = result.into();
         let result = match result.xy() {
             Some((x, y)) => G1Affine {
