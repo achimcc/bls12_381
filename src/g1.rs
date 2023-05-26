@@ -1,7 +1,6 @@
 //! This module provides an implementation of the $\mathbb{G}_1$ group of BLS12-381.
 use crate::ArkScale;
 
-use ark_ec::AffineRepr;
 use ark_scale::hazmat::ArkScaleProjective;
 use codec::{Decode, Encode};
 use core::borrow::Borrow;
@@ -604,17 +603,22 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
         .unwrap()
         .0;
 
-        // Convert result back into bls12_381 representation
-        let result: ark_bls12_381::G1Affine = result.into();
-        let result = match result.xy() {
-            Some((x, y)) => G1Affine {
-                x: Fp(x.0 .0),
-                y: Fp(y.0 .0),
-                infinity: Choice::from(0),
+        let x = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.x).l);
+        let y = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.y).l);
+        let z = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.z).l);
+
+        let z_inv: Option<Fp> = z.invert().into();
+
+        let result = match z_inv {
+            Some(z_inv) => G1Projective {
+                x: x * (z_inv.square()),
+                y: y * (z_inv.square() * z_inv),
+                z: Fp::one(),
             },
-            None => G1Affine::identity(),
+            None => G1Projective::identity(),
         };
-        result.into()
+
+        result
     }
 }
 
