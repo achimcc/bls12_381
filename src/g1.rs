@@ -607,15 +607,15 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
         let y = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.y).l);
         let z = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.z).l);
 
-        let result = match z.is_zero() {
-            fale => G1Projective {
+        let result = G1Projective::conditional_select(
+            &G1Projective::identity(),
+            &G1Projective {
                 x: x * z,
                 y: y,
                 z: z.square() * z,
             },
-            true => G1Projective::identity(),
-        };
-
+            z.is_zero(),
+        );
         result
     }
 }
