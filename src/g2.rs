@@ -876,15 +876,11 @@ impl G2Projective {
             c0: Fp(z.fp[0].l),
             c1: Fp(z.fp[1].l),
         };
-        let result = G2Projective::conditional_select(
-            &G2Projective {
-                x: x * z,
-                y: y,
-                z: z.square() * z,
-            },
-            &G2Projective::identity(),
-            z.is_zero(),
-        );
+        let result = G2Projective {
+            x: x * z,
+            y: y,
+            z: z.square() * z,
+        };
         result
         // let mut acc = G2Projective::identity();
 
