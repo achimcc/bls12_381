@@ -1,6 +1,7 @@
 //! This module provides an implementation of the $\mathbb{G}_1$ group of BLS12-381.
 use crate::ArkScale;
 
+use ark_ff::Field;
 use ark_scale::hazmat::ArkScaleProjective;
 use codec::{Decode, Encode};
 use core::borrow::Borrow;
@@ -560,7 +561,53 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Projective {
     type Output = G1Projective;
 
     fn mul(self, other: &'b Scalar) -> Self::Output {
-        self.multiply(&other.to_bytes())
+        // Convert ZCash G1Projective to Arkworks G1Projective
+        let x = fastcrypto_zkp::bls12381::conversions::blst_fp_to_bls_fq(&blst::blst_fp {
+            l: self.x.0,
+        });
+        let y = fastcrypto_zkp::bls12381::conversions::blst_fp_to_bls_fq(&blst::blst_fp {
+            l: self.y.0,
+        });
+        let z = fastcrypto_zkp::bls12381::conversions::blst_fp_to_bls_fq(&blst::blst_fp {
+            l: self.z.0,
+        });
+        let base = ark_bls12_381::G1Projective {
+            x: x * z,
+            y: y * z.square(),
+            z: z,
+        };
+
+        // We need to perform Montgomery reduction to get it into Arkworks representation
+        let other = other.to_bytes();
+        let other = num_bigint::BigUint::from_bytes_le(&other);
+        let other = other.to_u64_digits();
+
+        // Serialize, compute projective mul, deserialize
+        let base: ArkScaleProjective<ark_bls12_381::G1Projective> = base.into();
+        let other: ArkScale<&[u64]> = other.as_slice().into();
+        let result =
+            sp_crypto_ec_utils::bls12_381::mul_projective_g1(base.encode(), other.encode())
+                .unwrap();
+        let result = <ArkScaleProjective<ark_bls12_381::G1Projective> as Decode>::decode(
+            &mut result.as_slice(),
+        )
+        .unwrap()
+        .0;
+
+        // Convert ZCash Projective to Arkworks projective, return result
+        let x = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.x).l);
+        let y = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.y).l);
+        let z = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.z).l);
+        let result = G1Projective::conditional_select(
+            &G1Projective {
+                x: x * z,
+                y: y,
+                z: z.square() * z,
+            },
+            &G1Projective::identity(),
+            z.is_zero(),
+        );
+        result
     }
 }
 
@@ -577,36 +624,34 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
     type Output = G1Projective;
 
     fn mul(self, other: &'b Scalar) -> Self::Output {
-        // conver to arkworks G1Affine
+        // convert to arkworks G1Affine
         let base = fastcrypto_zkp::bls12381::conversions::bls_g1_affine_from_zcash_bytes(
             &self.to_bytes().0,
         )
         .unwrap();
         let base: ark_bls12_381::G1Projective = base.into();
-        let base: ArkScaleProjective<ark_bls12_381::G1Projective> = base.into();
 
         // We need to perform Montgomery reduction to get it into Arkworks representation
         let other = other.to_bytes();
         let other = num_bigint::BigUint::from_bytes_le(&other);
         let other = other.to_u64_digits();
-        let other: ArkScale<&[u64]> = other.as_slice().into();
 
-        // Compute affine mul
+        // Serialize, compute projective mul, deserialize
+        let other: ArkScale<&[u64]> = other.as_slice().into();
+        let base: ArkScaleProjective<ark_bls12_381::G1Projective> = base.into();
         let result =
             sp_crypto_ec_utils::bls12_381::mul_projective_g1(base.encode(), other.encode())
                 .unwrap();
-
-        // Deserialize into arkworks bls12_381 Projective
         let result = <ArkScaleProjective<ark_bls12_381::G1Projective> as Decode>::decode(
             &mut result.as_slice(),
         )
         .unwrap()
         .0;
 
+        // Convert ZCash Projective to Arkworks projective, return result
         let x = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.x).l);
         let y = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.y).l);
         let z = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.z).l);
-
         let result = G1Projective::conditional_select(
             &G1Projective {
                 x: x * z,
@@ -791,28 +836,6 @@ impl G1Projective {
         };
 
         G1Projective::conditional_select(&tmp, self, rhs.is_identity())
-    }
-
-    fn multiply(&self, by: &[u8; 32]) -> G1Projective {
-        let mut acc = G1Projective::identity();
-
-        // This is a simple double-and-add implementation of point
-        // multiplication, moving from most significant to least
-        // significant bit of the scalar.
-        //
-        // We skip the leading bit because it's always unset for Fq
-        // elements.
-        for bit in by
-            .iter()
-            .rev()
-            .flat_map(|byte| (0..8).rev().map(move |i| Choice::from((byte >> i) & 1u8)))
-            .skip(1)
-        {
-            acc = acc.double();
-            acc = G1Projective::conditional_select(&acc, &(acc + self), bit);
-        }
-
-        acc
     }
 
     /// Multiply `self` by `crate::BLS_X`, using double and add.
