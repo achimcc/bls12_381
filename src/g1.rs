@@ -598,15 +598,11 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Projective {
         let x = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.x).l);
         let y = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.y).l);
         let z = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.z).l);
-        let result = G1Projective::conditional_select(
-            &G1Projective {
-                x: x * z,
-                y: y,
-                z: z.square() * z,
-            },
-            &G1Projective::identity(),
-            z.is_zero(),
-        );
+        let result = G1Projective {
+            x: x * z,
+            y: y,
+            z: z.square() * z,
+        };
         result
     }
 }
@@ -652,15 +648,11 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
         let x = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.x).l);
         let y = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.y).l);
         let z = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.z).l);
-        let result = G1Projective::conditional_select(
-            &G1Projective {
-                x: x * z,
-                y: y,
-                z: z.square() * z,
-            },
-            &G1Projective::identity(),
-            z.is_zero(),
-        );
+        let result = G1Projective {
+            x: x * z,
+            y: y,
+            z: z.square() * z,
+        };
         result
     }
 }

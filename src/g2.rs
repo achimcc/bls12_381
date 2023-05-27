@@ -1,5 +1,10 @@
 //! This module provides an implementation of the $\mathbb{G}_2$ group of BLS12-381.
 
+use crate::ArkScale;
+use ark_ff::Field;
+use ark_scale::hazmat::ArkScaleProjective;
+use blst::{blst_fp, blst_fp2};
+use codec::{Decode, Encode};
 use core::borrow::Borrow;
 use core::fmt;
 use core::iter::Sum;
@@ -823,25 +828,79 @@ impl G2Projective {
     }
 
     fn multiply(&self, by: &[u8]) -> G2Projective {
-        let mut acc = G2Projective::identity();
+        // Convert ZCash G1Projective to Arkworks G1Projective
+        let x = fastcrypto_zkp::bls12381::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
+            fp: [blst_fp { l: self.x.c0.0 }, blst_fp { l: self.x.c1.0 }],
+        });
+        let y = fastcrypto_zkp::bls12381::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
+            fp: [blst_fp { l: self.y.c0.0 }, blst_fp { l: self.y.c1.0 }],
+        });
+        let z = fastcrypto_zkp::bls12381::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
+            fp: [blst_fp { l: self.z.c0.0 }, blst_fp { l: self.z.c1.0 }],
+        });
+        let base = ark_bls12_381::G2Projective {
+            x: x * z,
+            y: y * z.square(),
+            z: z,
+        };
 
-        // This is a simple double-and-add implementation of point
-        // multiplication, moving from most significant to least
-        // significant bit of the scalar.
-        //
-        // We skip the leading bit because it's always unset for Fq
-        // elements.
-        for bit in by
-            .iter()
-            .rev()
-            .flat_map(|byte| (0..8).rev().map(move |i| Choice::from((byte >> i) & 1u8)))
-            .skip(1)
-        {
-            acc = acc.double();
-            acc = G2Projective::conditional_select(&acc, &(acc + self), bit);
-        }
+        // We need to perform Montgomery reduction to get it into Arkworks representation
+        let by = num_bigint::BigUint::from_bytes_le(&by);
+        let other = by.to_u64_digits();
 
-        acc
+        // Serialize, compute projective mul, deserialize
+        let base: ArkScaleProjective<ark_bls12_381::G2Projective> = base.into();
+        let other: ArkScale<&[u64]> = other.as_slice().into();
+        let result =
+            sp_crypto_ec_utils::bls12_381::mul_projective_g2(base.encode(), other.encode())
+                .unwrap();
+        let result = <ArkScaleProjective<ark_bls12_381::G2Projective> as Decode>::decode(
+            &mut result.as_slice(),
+        )
+        .unwrap()
+        .0;
+
+        // Convert ZCash Projective to Arkworks projective, return result
+        let x = fastcrypto_zkp::bls12381::conversions::bls_fq2_to_blst_fp2(&result.x);
+        let x = Fp2 {
+            c0: Fp(x.fp[0].l),
+            c1: Fp(x.fp[1].l),
+        };
+        let y = fastcrypto_zkp::bls12381::conversions::bls_fq2_to_blst_fp2(&result.y);
+        let y = Fp2 {
+            c0: Fp(y.fp[0].l),
+            c1: Fp(y.fp[1].l),
+        };
+        let z = fastcrypto_zkp::bls12381::conversions::bls_fq2_to_blst_fp2(&result.z);
+        let z = Fp2 {
+            c0: Fp(z.fp[0].l),
+            c1: Fp(z.fp[1].l),
+        };
+        let result = G2Projective {
+            x: x * z,
+            y: y,
+            z: z.square() * z,
+        };
+        result
+        // let mut acc = G2Projective::identity();
+
+        // // This is a simple double-and-add implementation of point
+        // // multiplication, moving from most significant to least
+        // // significant bit of the scalar.
+        // //
+        // // We skip the leading bit because it's always unset for Fq
+        // // elements.
+        // for bit in by
+        //     .iter()
+        //     .rev()
+        //     .flat_map(|byte| (0..8).rev().map(move |i| Choice::from((byte >> i) & 1u8)))
+        //     .skip(1)
+        // {
+        //     acc = acc.double();
+        //     acc = G2Projective::conditional_select(&acc, &(acc + self), bit);
+        // }
+
+        // acc
     }
 
     fn psi(&self) -> G2Projective {
