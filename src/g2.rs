@@ -829,13 +829,13 @@ impl G2Projective {
 
     fn multiply(&self, by: &[u8]) -> G2Projective {
         // Convert ZCash G1Projective to Arkworks G1Projective
-        let x = fastcrypto_zkp::bls12381::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
+        let x = crate::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
             fp: [blst_fp { l: self.x.c0.0 }, blst_fp { l: self.x.c1.0 }],
         });
-        let y = fastcrypto_zkp::bls12381::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
+        let y = crate::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
             fp: [blst_fp { l: self.y.c0.0 }, blst_fp { l: self.y.c1.0 }],
         });
-        let z = fastcrypto_zkp::bls12381::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
+        let z = crate::conversions::blst_fp2_to_bls_fq2(&blst_fp2 {
             fp: [blst_fp { l: self.z.c0.0 }, blst_fp { l: self.z.c1.0 }],
         });
         let base = ark_bls12_381::G2Projective {
@@ -861,17 +861,17 @@ impl G2Projective {
         .0;
 
         // Convert ZCash Projective to Arkworks projective, return result
-        let x = fastcrypto_zkp::bls12381::conversions::bls_fq2_to_blst_fp2(&result.x);
+        let x = crate::conversions::bls_fq2_to_blst_fp2(&result.x);
         let x = Fp2 {
             c0: Fp(x.fp[0].l),
             c1: Fp(x.fp[1].l),
         };
-        let y = fastcrypto_zkp::bls12381::conversions::bls_fq2_to_blst_fp2(&result.y);
+        let y = crate::conversions::bls_fq2_to_blst_fp2(&result.y);
         let y = Fp2 {
             c0: Fp(y.fp[0].l),
             c1: Fp(y.fp[1].l),
         };
-        let z = fastcrypto_zkp::bls12381::conversions::bls_fq2_to_blst_fp2(&result.z);
+        let z = crate::conversions::bls_fq2_to_blst_fp2(&result.z);
         let z = Fp2 {
             c0: Fp(z.fp[0].l),
             c1: Fp(z.fp[1].l),

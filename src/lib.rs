@@ -47,6 +47,8 @@ pub mod notes {
 
 mod scalar;
 
+pub mod conversions;
+
 pub use scalar::Scalar;
 
 #[cfg(feature = "groups")]
