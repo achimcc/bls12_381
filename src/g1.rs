@@ -562,15 +562,9 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Projective {
 
     fn mul(self, other: &'b Scalar) -> Self::Output {
         // Convert ZCash G1Projective to Arkworks G1Projective
-        let x = fastcrypto_zkp::bls12381::conversions::blst_fp_to_bls_fq(&blst::blst_fp {
-            l: self.x.0,
-        });
-        let y = fastcrypto_zkp::bls12381::conversions::blst_fp_to_bls_fq(&blst::blst_fp {
-            l: self.y.0,
-        });
-        let z = fastcrypto_zkp::bls12381::conversions::blst_fp_to_bls_fq(&blst::blst_fp {
-            l: self.z.0,
-        });
+        let x = crate::conversions::blst_fp_to_bls_fq(&blst::blst_fp { l: self.x.0 });
+        let y = crate::conversions::blst_fp_to_bls_fq(&blst::blst_fp { l: self.y.0 });
+        let z = crate::conversions::blst_fp_to_bls_fq(&blst::blst_fp { l: self.z.0 });
         let base = ark_bls12_381::G1Projective {
             x: x * z,
             y: y * z.square(),
@@ -595,9 +589,9 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Projective {
         .0;
 
         // Convert ZCash Projective to Arkworks projective, return result
-        let x = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.x).l);
-        let y = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.y).l);
-        let z = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.z).l);
+        let x = Fp(crate::conversions::bls_fq_to_blst_fp(&result.x).l);
+        let y = Fp(crate::conversions::bls_fq_to_blst_fp(&result.y).l);
+        let z = Fp(crate::conversions::bls_fq_to_blst_fp(&result.z).l);
         let result = G1Projective {
             x: x * z,
             y: y,
@@ -621,10 +615,7 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
 
     fn mul(self, other: &'b Scalar) -> Self::Output {
         // convert to arkworks G1Affine
-        let base = fastcrypto_zkp::bls12381::conversions::bls_g1_affine_from_zcash_bytes(
-            &self.to_bytes().0,
-        )
-        .unwrap();
+        let base = crate::conversions::bls_g1_affine_from_zcash_bytes(&self.to_bytes().0).unwrap();
         let base: ark_bls12_381::G1Projective = base.into();
 
         // We need to perform Montgomery reduction to get it into Arkworks representation
@@ -645,9 +636,9 @@ impl<'a, 'b> Mul<&'b Scalar> for &'a G1Affine {
         .0;
 
         // Convert ZCash Projective to Arkworks projective, return result
-        let x = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.x).l);
-        let y = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.y).l);
-        let z = Fp(fastcrypto_zkp::bls12381::conversions::bls_fq_to_blst_fp(&result.z).l);
+        let x = Fp(crate::conversions::bls_fq_to_blst_fp(&result.x).l);
+        let y = Fp(crate::conversions::bls_fq_to_blst_fp(&result.y).l);
+        let z = Fp(crate::conversions::bls_fq_to_blst_fp(&result.z).l);
         let result = G1Projective {
             x: x * z,
             y: y,
