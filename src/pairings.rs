@@ -20,6 +20,10 @@ use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use pairing::MultiMillerLoop;
 
+/// target field returned by final exponentiation from Arkworkrs
+type ArkTargetField =
+    <ark_ec::bls12::Bls12<ark_bls12_381::Config> as ark_ec::pairing::Pairing>::TargetField;
+
 /// Represents results of a Miller loop, one of the most expensive portions
 /// of the pairing function. `MillerLoopResult`s cannot be compared with each
 /// other until `.final_exponentiation()` is called, which is also expensive.
@@ -49,7 +53,7 @@ impl MillerLoopResult {
     /// operation in the so-called `cyclotomic subgroup` of `Fq6` so that
     /// it can be compared with other elements of `Gt`.
     pub fn final_exponentiation(&self) -> Gt {
-        let target = <ark_ec::bls12::Bls12<ark_bls12_381::Config> as ark_ec::pairing::Pairing>::TargetField {
+        let target = ArkTargetField {
             c0: ark_bls12_381::Fq6 {
                 c0: ark_bls12_381::Fq2 {
                     c0: ark_ff::Fp {
